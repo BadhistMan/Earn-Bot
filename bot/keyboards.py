@@ -1,4 +1,17 @@
+# bot/keyboards.py
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+
+def verify_join_keyboard():
+    channel_username = os.environ.get('FORCE_JOIN_CHANNEL', '').lstrip('@')
+    keyboard = [
+        [InlineKeyboardButton("✅ I Have Joined", callback_data='verify_join')],
+        [InlineKeyboardButton("➡️ Join Channel", url=f"https://t.me/{channel_username}")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def request_phone_keyboard():
+    keyboard = [[KeyboardButton("📱 Share My Phone Number", request_contact=True)]]
+    return ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
 def main_menu_keyboard():
     keyboard = [
@@ -8,20 +21,25 @@ def main_menu_keyboard():
          InlineKeyboardButton("💸 Withdraw", callback_data='withdraw')],
         [InlineKeyboardButton("🏆 Top Referrers", callback_data='top_referrers'),
          InlineKeyboardButton("📊 Statistics", callback_data='statistics')],
-        [InlineKeyboardButton("⚙️ Account Settings", callback_data='account_settings'),
-         InlineKeyboardButton("❓ Help & Support", callback_data='help_support')]
+        [InlineKeyboardButton("❓ Help & Support", callback_data='help_support')]
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def verify_join_keyboard(channel_username):
+def back_to_menu_keyboard():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data='main_menu')]])
+
+def withdrawal_methods_keyboard():
     keyboard = [
-        [InlineKeyboardButton("✅ Verify", callback_data='verify_join')],
-        [InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username}")]
+        [InlineKeyboardButton("💵 Telebirr", callback_data='withdraw_telebirr')],
+        [InlineKeyboardButton("🏦 CBE Bank", callback_data='withdraw_cbe')],
+        [InlineKeyboardButton("💎 USDT (TRC20)", callback_data='withdraw_usdt')],
+        [InlineKeyboardButton("⬅️ Back", callback_data='main_menu')]
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def request_phone_keyboard():
-    keyboard = [[KeyboardButton("Share My Phone Number", request_contact=True)]]
-    return ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-
-# ... (Add other keyboards for withdrawal methods, settings, etc.)
+def admin_withdrawal_keyboard(withdrawal_id):
+    keyboard = [
+        [InlineKeyboardButton("✅ Approve", callback_data=f'admin_approve_{withdrawal_id}'),
+         InlineKeyboardButton("❌ Reject", callback_data=f'admin_reject_{withdrawal_id}')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
