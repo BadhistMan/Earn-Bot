@@ -9,26 +9,38 @@ def get_connection():
     return psycopg2.connect(os.environ.get('DATABASE_URL'))
 
 def setup_database():
-    """Create or update tables if they don't exist."""
+    """
+    Create or update tables using idempotent methods. This can be run safely
+    on every bot startup without causing errors.
+    """
     conn = get_connection()
     with conn.cursor() as cur:
+        # Create users table if it doesn't exist
         cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id BIGINT PRIMARY KEY,
             username VARCHAR(255),
             phone_number VARCHAR(20),
-            ip_address VARCHAR(45),
             referred_by BIGINT,
             balance INT DEFAULT 0,
             joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         """)
-        # Add ip_address column if it doesn't exist (for seamless updates)
-        try:
-            cur.execute("ALTER TABLE users ADD COLUMN ip_address VARCHAR(45);")
-        except psycopg2.errors.DuplicateColumn:
-            pass # Column already exists
-            
+        
+        # Safely add the ip_address column if it's missing
+        cur.execute("""
+        DO $$
+        BEGIN
+            BEGIN
+                ALTER TABLE users ADD COLUMN ip_address VARCHAR(45);
+            EXCEPTION
+                WHEN duplicate_column THEN -- do nothing if column already exists
+            END;
+        END;
+        $$;
+        """)
+        
+        # Create other tables
         cur.execute("""
         CREATE TABLE IF NOT EXISTS referrals (
             id SERIAL PRIMARY KEY,
@@ -50,6 +62,9 @@ def setup_database():
         """)
     conn.commit()
     conn.close()
+    
+# ... (The rest of the database.py file remains the same as the previous "Full Code" version)
+# You only need to replace the setup_database function, but replacing the whole file is safest.
 
 # --- User Functions ---
 def user_exists(user_id):
