@@ -12,12 +12,12 @@ ADMIN_ID = int(os.environ.get('ADMIN_TELEGRAM_ID'))
 CHANNEL_ID = os.environ.get('FORCE_JOIN_CHANNEL')
 REFERRAL_BONUS = 5
 MIN_WITHDRAWAL = 100
-BONUS_THRESHOLD = 10 # Refer 10 users...
-BONUS_AMOUNT = 10    # ...to get a 10 ETB bonus
+BONUS_THRESHOLD = 10
+BONUS_AMOUNT = 10
 
 # --- State definitions for ConversationHandlers ---
 (ASK_WITHDRAWAL_METHOD, ASK_WITHDRAWAL_DETAILS, ASK_WITHDRAWAL_AMOUNT) = range(3)
-(ASK_BROADCAST_MESSAGE, CONFIRM_BROADCAST) = range(2)
+(ASK_BROADCAST_MESSAGE, CONFIRM_BROADCAST) = range(3, 5)
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -30,7 +30,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     try:
         referrer_id = int(context.args[0]) if context.args and context.args[0].isdigit() else None
-        if referrer_id == user.id: referrer_id = None # Block self-referral
+        if referrer_id == user.id: referrer_id = None
         context.user_data['referrer_id'] = referrer_id
     except (IndexError, ValueError):
         context.user_data['referrer_id'] = None
@@ -47,7 +47,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await ask_for_phone(update)
     except Exception as e:
         logger.error(f"Error checking channel membership for {user.id}: {e}")
-        await update.message.reply_text("Sorry, we couldn't verify your channel membership. Please ensure the bot has admin rights in the channel and try again.")
+        await update.message.reply_text("Sorry, we couldn't verify your channel membership. Please ensure the bot is an admin in the channel with 'Invite Users' permission and try again.")
 
 async def verify_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -73,7 +73,6 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.update_balance(referrer_id, REFERRAL_BONUS)
         await notify_referrer(context, referrer_id, user)
         
-        # --- NEW: Check for Bonus ---
         referral_count = db.get_referral_count(referrer_id)
         if referral_count == BONUS_THRESHOLD:
             db.update_balance(referrer_id, BONUS_AMOUNT)
@@ -90,10 +89,10 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============================================================================
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if not query: return
     await query.answer()
     data = query.data
 
-    # User Menu Routes
     if data == 'main_menu': await show_main_menu(update, "Welcome to the main menu:", edit=True)
     elif data == 'my_balance': await my_balance_handler(update)
     elif data == 'refer_friends': await refer_friends_handler(update, context)
@@ -101,7 +100,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'top_referrers': await top_referrers_handler(update)
     elif data == 'statistics': await statistics_handler(update)
     elif data == 'help_support': await help_support_handler(update)
-    # Admin Menu Routes
     elif data == 'admin_stats': await admin_stats_handler(update)
     elif data == 'admin_withdrawals': await admin_withdrawals_handler(update)
     elif data.startswith('admin_approve_'): await approve_withdrawal(update, context)
@@ -119,8 +117,7 @@ async def refer_friends_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def my_referrals_handler(update: Update):
     referrals = db.get_user_referrals(update.effective_user.id)
-    count = len(referrals)
-    text = f"📝 **My Referrals ({count})**\n\n" + ("\n".join([f"- @{u[1]}" if u[1] else f"- User ID: {u[0]}" for u in referrals[:20]]) or "You haven't referred anyone yet.")
+    text = f"📝 **My Referrals ({len(referrals)})**\n\n" + ("\n".join([f"- @{u[1]}" if u[1] else f"- User ID: {u[0]}" for u in referrals[:20]]) or "You haven't referred anyone yet.")
     await edit_or_reply(update, text, keyboards.back_to_menu_keyboard())
 
 async def top_referrers_handler(update: Update):
@@ -132,7 +129,7 @@ async def statistics_handler(update: Update):
     await edit_or_reply(update, f"📊 **Bot Statistics**\n\nTotal Users: **{db.get_total_user_count()}**", keyboards.back_to_menu_keyboard())
 
 async def help_support_handler(update: Update):
-    text = f"❓ **Help & Support**\n\n**How it works:** Share your referral link. When a friend joins and completes verification, you earn {REFERRAL_BONUS} ETB.\n\n**Withdrawals:** You need a minimum of {MIN_WITHDRAWAL} ETB. Go to 'Withdraw' to start.\n\n**Bonus:** Get an extra {BONUS_AMOUNT} ETB when you refer {BONUS_THRESHOLD} people!\n\nFor issues, contact the admin."
+    text = f"❓ **Help & Support**\n\n**How it works:** Share your referral link. When a friend joins and completes verification, you earn {REFERRAL_BONUS} ETB.\n\n**Withdrawals:** You need a minimum of {MIN_WITHDRAWAL} ETB.\n\n**Bonus:** Get an extra {BONUS_AMOUNT} ETB when you refer {BONUS_THRESHOLD} people!\n\nFor issues, contact the admin."
     await edit_or_reply(update, text, keyboards.back_to_menu_keyboard())
 
 # =============================================================================
@@ -145,7 +142,7 @@ async def start_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer(f"You need at least {MIN_WITHDRAWAL} ETB. Your balance is {balance} ETB.", show_alert=True)
         return ConversationHandler.END
     context.user_data['balance'] = balance
-    await query.edit_message_text("💸 **Withdrawal**\n\nPlease select your preferred withdrawal method:", reply_markup=keyboards.withdrawal_methods_keyboard())
+    await query.edit_message_text("💸 Please select your withdrawal method:", reply_markup=keyboards.withdrawal_methods_keyboard())
     return ASK_WITHDRAWAL_METHOD
 
 async def withdrawal_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -169,14 +166,10 @@ async def withdrawal_amount_received(update: Update, context: ContextTypes.DEFAU
     except ValueError:
         await update.message.reply_text("Invalid input. Please enter a number."); return ASK_WITHDRAWAL_AMOUNT
 
-    user_id = update.effective_user.id
-    method = context.user_data['withdrawal_method']
-    details = context.user_data['withdrawal_details']
-    withdrawal_id = db.create_withdrawal_request(user_id, method, details, amount)
-    
+    withdrawal_id = db.create_withdrawal_request(update.effective_user.id, context.user_data['withdrawal_method'], context.user_data['withdrawal_details'], amount)
     await update.message.reply_text("✅ Your withdrawal request has been submitted successfully!")
     await show_main_menu(update, "Welcome to the main menu:")
-    await notify_admin_of_withdrawal(context, update.effective_user, method, details, amount, withdrawal_id)
+    await notify_admin_of_withdrawal(context, update.effective_user, context.user_data['withdrawal_method'], context.user_data['withdrawal_details'], amount, withdrawal_id)
     return ConversationHandler.END
 
 # =============================================================================
@@ -198,11 +191,11 @@ async def admin_withdrawals_handler(update: Update):
         return
     await edit_or_reply(update, f"Found {len(pending)} pending withdrawal(s):", keyboards.admin_panel_keyboard())
     for w_id, u_id, u_name, method, details, amount in pending:
-        text = f"**Request ID:** {w_id}\n**User:** @{u_name} ({u_id})\n**Method:** {method}\n**Details:** `{details}`\n**Amount:** {amount} ETB"
+        text = f"**ID:** {w_id} | **User:** @{u_name} ({u_id})\n**Method:** {method}\n**Details:** `{details}`\n**Amount:** {amount} ETB"
         await update.effective_message.reply_text(text, reply_markup=keyboards.admin_withdrawal_keyboard(w_id), parse_mode=ParseMode.MARKDOWN)
 
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.edit_message_text("Please send the message you want to broadcast to all users. To cancel, type /cancel.")
+    await update.callback_query.edit_message_text("Please send the message you want to broadcast. To cancel, type /cancel.")
     return ASK_BROADCAST_MESSAGE
 
 async def broadcast_message_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -213,15 +206,14 @@ async def broadcast_message_received(update: Update, context: ContextTypes.DEFAU
 async def broadcast_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.upper() != 'YES':
         await update.message.reply_text("Broadcast aborted.")
-        return await admin_command(update, context)
+        await admin_command(update, context)
+        return ConversationHandler.END
 
     await update.message.reply_text("Broadcasting... this may take a while.")
-    message = context.user_data['broadcast_message']
-    user_ids = db.get_all_user_ids()
     sent_count, failed_count = 0, 0
-    for user_id in user_ids:
+    for user_id in db.get_all_user_ids():
         try:
-            await message.copy(chat_id=user_id)
+            await context.user_data['broadcast_message'].copy(chat_id=user_id)
             sent_count += 1
         except Exception:
             failed_count += 1
@@ -241,7 +233,12 @@ async def reject_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_to_refund: db.update_balance(user_to_refund, amount_to_refund)
     db.update_withdrawal_status(withdrawal_id, 'rejected')
     await query.edit_message_text(text=query.message.text + "\n\n**Status: ❌ Rejected (Amount Refunded)**", parse_mode=ParseMode.MARKDOWN)
-    await context.bot.send_message(chat_id=user_to_refund, text=f"Your withdrawal request was rejected. The amount of {amount_to_refund} ETB has been returned to your balance.")
+    await context.bot.send_message(chat_id=user_to_refund, text=f"Your withdrawal request was rejected by the admin. The amount of {amount_to_refund} ETB has been returned to your balance.")
+
+async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Action cancelled.", reply_markup=ReplyKeyboardRemove())
+    await admin_command(update, context)
+    return ConversationHandler.END
 
 # =============================================================================
 # === HELPER FUNCTIONS ========================================================
@@ -252,26 +249,22 @@ async def send_verification_message(update: Update):
     except FileNotFoundError: await update.message.reply_text(text, reply_markup=keyboards.verify_join_keyboard(), parse_mode=ParseMode.MARKDOWN)
 
 async def ask_for_phone(update: Update):
-    text = "✅ **Thank you for joining!**\n\nTo complete your registration, please share your phone number with us by clicking the button below."
+    text = "✅ **Thank you!**\n\nTo complete your registration, please share your phone number by clicking the button below."
     message_source = update.callback_query.message if update.callback_query else update.message
     await message_source.reply_text(text, reply_markup=keyboards.request_phone_keyboard(), parse_mode=ParseMode.MARKDOWN)
 
 async def show_main_menu(update: Update, text: str, edit: bool = False):
-    if edit or update.callback_query: await update.callback_query.edit_message_text(text, reply_markup=keyboards.main_menu_keyboard(), parse_mode=ParseMode.MARKDOWN)
-    else: await update.message.reply_text(text, reply_markup=keyboards.main_menu_keyboard(), parse_mode=ParseMode.MARKDOWN)
+    source = update.callback_query.message if update.callback_query else update.message
+    if edit: await source.edit_text(text, reply_markup=keyboards.main_menu_keyboard(), parse_mode=ParseMode.MARKDOWN)
+    else: await source.reply_text(text, reply_markup=keyboards.main_menu_keyboard(), parse_mode=ParseMode.MARKDOWN)
 
 async def edit_or_reply(update: Update, text: str, reply_markup):
     if update.callback_query: await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
     else: await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
 
 async def notify_referrer(context, referrer_id, new_user):
-    await context.bot.send_message(chat_id=referrer_id, text=f"🎉 Congratulations! User *{new_user.first_name}* joined with your link. You've earned **{REFERRAL_BONUS} ETB**!", parse_mode=ParseMode.MARKDOWN)
+    await context.bot.send_message(chat_id=referrer_id, text=f"🎉 Congratulations! User **{new_user.first_name}** joined with your link. You've earned **{REFERRAL_BONUS} ETB**!", parse_mode=ParseMode.MARKDOWN)
 
 async def notify_admin_of_withdrawal(context, user, method, details, amount, w_id):
     text = f"⚠️ **New Withdrawal Request!**\n\n**User:** @{user.username} ({user.id})\n**Method:** {method}\n**Details:** `{details}`\n**Amount:** {amount} ETB"
     await context.bot.send_message(chat_id=ADMIN_ID, text=text, reply_markup=keyboards.admin_withdrawal_keyboard(w_id), parse_mode=ParseMode.MARKDOWN)
-
-async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Action cancelled.", reply_markup=ReplyKeyboardRemove())
-    await admin_command(update, context) # Return to admin menu
-    return ConversationHandler.END
