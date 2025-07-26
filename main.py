@@ -24,7 +24,7 @@ def main():
 
     application = Application.builder().token(TOKEN).build()
 
-    # Conversation handler for Withdrawal
+    # --- Conversation Handler for Withdrawal ---
     withdrawal_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(handlers.start_withdrawal, pattern='^withdraw$')],
         states={
@@ -44,7 +44,7 @@ def main():
         ],
     )
     
-    # Conversation handler for Admin Broadcast
+    # --- Conversation Handler for Admin Broadcast ---
     broadcast_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(handlers.start_broadcast, pattern='^admin_broadcast$')],
         states={
@@ -62,6 +62,7 @@ def main():
     # Top-level commands
     application.add_handler(CommandHandler("start", handlers.start))
     application.add_handler(CommandHandler("admin", handlers.admin_command))
+    application.add_handler(CommandHandler("myid", handlers.my_id_command)) # ADD THIS LINE
     
     # Registration Flow
     application.add_handler(MessageHandler(filters.CONTACT, handlers.contact_handler))
@@ -71,10 +72,10 @@ def main():
     application.add_handler(withdrawal_handler)
     application.add_handler(broadcast_handler)
     
-    # This handler routes all other button clicks. It MUST be one of the last handlers added.
+    # This handler routes all other button clicks.
     application.add_handler(CallbackQueryHandler(handlers.button_handler))
 
-    print("Bot is starting... Final version.")
+    print("Bot is starting... Final version with Admin Panel fix.")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
