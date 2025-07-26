@@ -1,6 +1,9 @@
 # main.py
 import os
 from dotenv import load_dotenv
+# --- The Fix is on this line ---
+from telegram import Update 
+# --- End of Fix ---
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
 )
@@ -57,7 +60,16 @@ def main():
     application.add_handler(CallbackQueryHandler(handlers.button_handler))
 
     print("Bot is running with all features and fixes...")
+    # This line will now work correctly
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    main()
+    main()```
+
+### **What to Do Next**
+
+1.  **Replace the code** in your `main.py` file with the new, corrected version above.
+2.  **Commit and push** this one-line change to your GitHub repository.
+3.  **Render will automatically deploy** the fix.
+
+After this, your bot will start successfully. This was a minor oversight, and the fix is very straightforward.
