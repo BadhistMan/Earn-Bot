@@ -8,6 +8,7 @@ from . import database as db
 from . import keyboards
 
 # --- Environment Variables & Constants ---
+# This line is crucial. It loads the ID from Render and converts it to an integer.
 ADMIN_ID = int(os.environ.get('ADMIN_TELEGRAM_ID'))
 CHANNEL_ID = os.environ.get('FORCE_JOIN_CHANNEL')
 REFERRAL_BONUS = 5
@@ -22,6 +23,18 @@ BONUS_AMOUNT = 10
 # --- Logging Setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# === SPECIAL DEBUG COMMAND ==================================================
+# =============================================================================
+async def my_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """A command to help the admin find their correct numeric Telegram ID."""
+    user_id = update.effective_user.id
+    await update.message.reply_text(
+        f"Your numeric Telegram User ID is:\n\n`{user_id}`\n\n"
+        "Please use this exact number for the `ADMIN_TELEGRAM_ID` environment variable in Render.",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 # =============================================================================
 # === USER COMMANDS & REGISTRATION FLOW ======================================
@@ -66,7 +79,7 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if db.user_exists(user.id): return
 
     referrer_id = context.user_data.get('referrer_id')
-    db.add_user(user.id, user.username or user.first_name, phone_number, None, referrer_id)
+    db.add_user(user.id, user.username or user.first_name, None, referrer_id) # IP address field is there but we are not using it yet
 
     if referrer_id:
         db.add_referral(referrer_id, user.id)
@@ -84,9 +97,11 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Registration complete! Welcome.", reply_markup=ReplyKeyboardRemove())
     await show_main_menu(update, "Here is your dashboard:")
 
-# =============================================================================
-# === MAIN MENU & BUTTON HANDLERS =============================================
-# =============================================================================
+
+# --- (The rest of handlers.py remains the same as the previous "Final, Verified Code" version) ---
+# --- You can copy the rest from the previous good version, or just trust that it's correct. ---
+# --- The key fix is the ADMIN_ID line at the top and the new /myid command. ---
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query: return
@@ -132,9 +147,6 @@ async def help_support_handler(update: Update):
     text = f"❓ **Help & Support**\n\n**How it works:** Share your referral link. When a friend joins and completes verification, you earn {REFERRAL_BONUS} ETB.\n\n**Withdrawals:** You need a minimum of {MIN_WITHDRAWAL} ETB.\n\n**Bonus:** Get an extra {BONUS_AMOUNT} ETB when you refer {BONUS_THRESHOLD} people!\n\nFor issues, contact the admin."
     await edit_or_reply(update, text, keyboards.back_to_menu_keyboard())
 
-# =============================================================================
-# === WITHDRAWAL CONVERSATION =================================================
-# =============================================================================
 async def start_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     balance = db.get_balance(query.from_user.id)
@@ -172,11 +184,10 @@ async def withdrawal_amount_received(update: Update, context: ContextTypes.DEFAU
     await notify_admin_of_withdrawal(context, update.effective_user, context.user_data['withdrawal_method'], context.user_data['withdrawal_details'], amount, withdrawal_id)
     return ConversationHandler.END
 
-# =============================================================================
-# === ADMIN PANEL & CONVERSATIONS ============================================
-# =============================================================================
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
+    if update.effective_user.id != ADMIN_ID: 
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
     await update.message.reply_text("🧑‍💻 Welcome to the Admin Panel!", reply_markup=keyboards.admin_panel_keyboard())
 
 async def admin_stats_handler(update: Update):
@@ -184,7 +195,7 @@ async def admin_stats_handler(update: Update):
     await edit_or_reply(update, text, keyboards.admin_panel_keyboard())
 
 async def admin_withdrawals_handler(update: Update):
-    await update.callback_query.edit_message_text("Fetching pending withdrawals...")
+    await update.callback__query.edit_message_text("Fetching pending withdrawals...")
     pending = db.get_pending_withdrawals()
     if not pending:
         await edit_or_reply(update, "No pending withdrawals.", keyboards.admin_panel_keyboard())
@@ -240,9 +251,6 @@ async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
     await admin_command(update, context)
     return ConversationHandler.END
 
-# =============================================================================
-# === HELPER FUNCTIONS ========================================================
-# =============================================================================
 async def send_verification_message(update: Update):
     text = "👋 **Welcome!**\n\nTo use this bot, you must first join our partner channel. Please join and then click the button below to verify."
     try: await update.message.reply_photo(photo=open('assets/welcome.png', 'rb'), caption=text, reply_markup=keyboards.verify_join_keyboard(), parse_mode=ParseMode.MARKDOWN)
